@@ -1,24 +1,36 @@
-PROG      ?= firmware
-MDK       ?= $(realpath $(dir $(lastword $(MAKEFILE_LIST)))/..)
-ARCH      ?= ESP32C3
-#TOOLCHAIN ?= riscv64-unknown-elf
-TOOLCHAIN ?= docker run -it --rm -v $(MDK):$(MDK) -w $(CURDIR) mdashnet/riscv riscv-none-elf
-OBJ_PATH  ?= ./build
-ESPUTIL   ?= $(MDK)/tools/esputil
+PROG        ?= firmware
+MDK         ?= $(realpath $(dir $(lastword $(MAKEFILE_LIST)))/..)
+ARCH        ?= ESP32C3
+TOOLCHAIN   ?= riscv64-elf 
+#TOOLCHAIN ?= docker run -it --rm -v $(MDK):$(MDK) -w $(CURDIR) mdashnet/riscv riscv-none-elf
+OBJ_PATH    = ./build
+ESPUTIL     ?= $(MDK)/tools/esputil
+ESPTOOL     ?= python -m esptool
+PORT        ?= /dev/ttyUSB0
+
+# SDE: Hacks to try and get tcc working with an override script
+CC          ?= $(TOOLCHAIN)-gcc
+RISC-LD     ?= $(TOOLCHAIN)-gcc
+CXX         ?= $(TOOLCHAIN)-g++
+OBJCOPY     ?= $(TOOLCHAIN)-objcopy
+SIZE        ?= $(TOOLCHAIN)-size
+#TCC_INCLUDE ?= /usr/riscv64-elf/include
+TCC_INCLUDE ?= /home/nebk/Documents/programs/risc-v/tcc-riscv32/include 
 
 # -g3 pulls enums and defines into the debug info for GDB
 # -ffunction-sections -fdata-sections, -Wl,--gc-sections remove unused code
 # strict WARNFLAGS protect from stupid mistakes
 
 DEFS      ?=
-INCLUDES  ?= -I. -I$(MDK)/src -D$(ARCH)
+INCLUDES  ?= -I. -I$(MDK)/src -I$(TCC_INCLUDE) -D$(ARCH)
 WARNFLAGS ?= -W -Wall -Wextra -Werror -Wundef -Wshadow -Wdouble-promotion -fno-common -Wconversion
 OPTFLAGS  ?= -Os -g3 -ffunction-sections -fdata-sections
-CFLAGS    ?= $(WARNFLAGS) $(OPTFLAGS) $(MCUFLAGS) $(INCLUDES) $(DEFS) $(EXTRA_CFLAGS)
+#CFLAGS    ?= $(WARNFLAGS) $(OPTFLAGS) $(MCUFLAGS) $(INCLUDES) $(DEFS) $(EXTRA_CFLAGS)
+CFLAGS    ?= $(INCLUDES) $(DEFS) $(EXTRA_CFLAGS)
 LINKFLAGS ?= $(MCUFLAGS) -T$(MDK)/make/$(ARCH).ld -nostdlib -nostartfiles -Wl,--gc-sections $(EXTRA_LINKFLAGS)
 
 ifeq "$(ARCH)" "ESP32C3"
-MCUFLAGS  ?= -march=rv32imc -mabi=ilp32
+#MCUFLAGS  ?= -march=rv32imc -mabi=ilp32
 WARNFLAGS ?= -Wformat-truncation
 BLOFFSET  ?= 0  # 2nd stage bootloader flash offset
 else 
@@ -48,19 +60,19 @@ unix: $(SRCS)
 
 $(OBJ_PATH)/%.o: %.c
 	@mkdir -p $(dir $@)
-	$(TOOLCHAIN)-gcc $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -c $< -o $@
 
 $(OBJ_PATH)/%.o: %.cpp
 	@mkdir -p $(dir $@)
-	$(TOOLCHAIN)-g++ $(CFLAGS) -c $< -o $@
+	$(CXX) $(CFLAGS) -c $< -o $@
 
 $(OBJ_PATH)/%.o: %.s
 	@mkdir -p $(dir $@)
-	$(TOOLCHAIN)-gcc $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -c $< -o $@
 
 $(OBJ_PATH)/$(PROG).elf: $(OBJECTS)
-	$(TOOLCHAIN)-gcc -Xlinker $(OBJECTS) $(LINKFLAGS) -o $@
-	$(TOOLCHAIN)-size $@
+	$(RISC-LD) -Xlinker $(OBJECTS) $(LINKFLAGS) -o $@
+	$(SIZE) $@
 
 # elf_section_load_address FILE,SECTION_NAME
 elf_section_load_address = $(shell $(TOOLCHAIN)-objdump -h $1 | grep -F $2 | tr -s ' ' | cut -d ' ' -f 5)
@@ -70,8 +82,8 @@ elf_entry_point_address = $(shell $(TOOLCHAIN)-nm $1 | grep 'T $2' | cut -f1 -dT
 
 $(OBJ_PATH)/$(PROG).bin: $(ESPUTIL)
 $(OBJ_PATH)/$(PROG).bin: $(OBJ_PATH)/$(PROG).elf
-	$(TOOLCHAIN)-objcopy -O binary --only-section .text $< $(OBJ_PATH)/.text.bin
-	$(TOOLCHAIN)-objcopy -O binary --only-section .data $< $(OBJ_PATH)/.data.bin
+	$(OBJCOPY) -O binary --only-section .text $< $(OBJ_PATH)/.text.bin
+	$(OBJCOPY) -O binary --only-section .data $< $(OBJ_PATH)/.data.bin
 	$(ESPUTIL) mkbin $@ $(call elf_entry_point_address,$<,_reset) $(call elf_section_load_address,$<,.data) $(OBJ_PATH)/.data.bin $(call elf_section_load_address,$<,.text) $(OBJ_PATH)/.text.bin
 
 flash: $(OBJ_PATH)/$(PROG).bin $(ESPUTIL)
