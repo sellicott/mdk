@@ -7,7 +7,7 @@ int sdk_ram_used(void);
 int sdk_ram_free(void);
 
 static inline void spin(volatile unsigned long count) {
-  while (count--) asm volatile("nop");
+//  while (count--) asm volatile("nop");
 }
 
 #if defined(ESP32C3)

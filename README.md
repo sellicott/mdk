@@ -17,7 +17,13 @@ for a full firmware rebuild and flash:
 # Environment setup
 
 Install a GCC RISCV compiler and export environment variables:
-- MacOS (installation takes time):
+- Using Docker on Linux or Mac. Slower builds, but works off-the-shelf:
+  ```sh
+  $ export MDK=/path/to/mdk                 # Points to MDK directory
+  $ export PATH=$PATH:$MDK/tools            # Add $MDK/tools to $PATH
+  $ export PORT=/dev/cu.usb*                # Serial port for flashing
+  ```
+- Native MacOS (installation takes time):
   ```sh
   $ brew tap riscv/riscv
   $ brew install riscv-gnu-toolchain --with-multilib
@@ -27,7 +33,7 @@ Install a GCC RISCV compiler and export environment variables:
   $ export ARCH=ESP32C3                     # Choices: ESP32C3, ESP32
   $ export PORT=/dev/cu.usb*                # Serial port for flashing
   ```
-- Linux: install GCC, e.g. from https://github.com/espressif/crosstool-NG, then
+- Native Linux: install GCC, e.g. from https://github.com/espressif/crosstool-NG, then
   ```sh
   $ export MDK=/path/to/mdk                 # Points to MDK directory
   $ export PATH=$PATH:$MDK/tools            # Add $MDK/tools to $PATH
@@ -203,22 +209,60 @@ The image should be of the following format:
 
    0xe9 - Espressif image magic number. All images must start with 0xe9
    N    - a number of segments in the image
-   FP1  - flash mode. 0: QIO, 1: QOUT, 2: DIO, 3: DOUT
-   FP2  - flash size (high 4 bits) and flash frequency (low 4 bits):
+   F1  - flash mode. 0: QIO, 1: QOUT, 2: DIO, 3: DOUT
+   F2  - flash size (high 4 bits) and flash frequency (low 4 bits):
             size: 0: 1MB, 0x10: 2MB, 0x20: 4MB, 0x30: 8MB, 0x40: 16MB
             freq: 0: 40m, 1: 26m, 2: 20m, 0xf: 80m
-
    ENTRY - 4-byte entry point address in little endian
    C     - Chip ID. 0: ESP32, 5: ESP32C3
    V     - Chip revision
 ```
 
-By default, `esputil` uses flash params `0x21f`, which means 4MB chip,
-80 MHz frequency. In order to set a different value, use
-`-fp 0x..`  argument, or `FPARAMS=0x...` make variable.
-These two commands are equivalent:
+## Flash parameters
 
+Image header format includes two bytes, `F1` and `F2`, which desribe
+SPI flash parameters that ROM bootloader uses to load the rest of the firmware.
+Those two bytes encode three parameters:
+
+- Flash mode (F1 byte - can be `0`, `1`, `2`, `3`)
+- FLash size (hight 4 bits of F2 byte - can be `0`, `1`, `2`, `3`, `4`)
+- Flash frequency (low 4 bits of F2 byte - can be `0`, `1`, `2`, `f`)
+
+By default, `esputil` fetches flash params `F1` and `F2` from the
+existing bootloader by reading first 4 bytes of the bootloader from flash.
+It is possible to manually set flash params via the `-fp`
+flag, which is an integer value that represent 3 hex nimbles.
+For example `fp 0x22f` sets flash to DIO, 4MB, 80MHz:
+
+```sh
+$ esputil -fp 0x22f flash 0 build/firmware.bin
 ```
-$ make flash FPARAMS=0x21f
-$ esputil -fp 0x21f flash build/firmware.bin
+
+## FLash SPI pin settings
+
+Some boards fail to talk to flash: when you attempt to `esputil flash` them,
+they'll time out with the `flash_begin/erase failed`, for example trying to
+flash a bootloader on a ESP32-PICO-D4-Kit:
+
+
+```sh
+$ esputil flash 4096 build/bootloader/bootloader.bin 
+Error: can't read bootloader @ addr 0x1000
+Erasing 24736 bytes @ 0x1000
+flash_begin/erase failed
+```
+
+This is because ROM bootloader on such boards have wrong SPI pins settings.
+Espressif's `esptool.py` alleviates that by uploading its own piece of
+software into ESP32 RAM, which does the right thing. `esputil` uses ROM
+bootloader, and in order to fix an issue, a `-fspi FLASH_PARAMS` parameter
+can be set which manually sets flash SPI pins. The format of the 
+`FLASH_PARAMS` is five comma-separated integers for CLK,Q,D,HD,CS pins.
+
+A previously failed ESP32-PICO-D4-Kit example can be fixed by passing
+a correct SPI pin settings:
+
+```sh
+$ esputil -fspi 6,17,8,11,16 flash 4096 build/bootloader/bootloader.bin 
+Written build/bootloader/bootloader.bin, 24736 bytes @ 0x1000
 ```
