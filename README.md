@@ -1,12 +1,12 @@
 # MDK (Minimal Development Kit) - a baremetal ESP32/ESP32C3 SDK
 
-An bare metal, make-based SDK for the ESP32, ESP32C3 chips.
-It is written from scratch using datasheets (
-[ESP32 C3 TRM](https://www.espressif.com/sites/default/files/documentation/esp32-c3_technical_reference_manual_en.pdf),
-[ESP32 TRM](https://www.espressif.com/sites/default/files/documentation/esp32_technical_reference_manual_en.pdf)
-).
-It is completely independent from the ESP-IDF and does not use any
-ESP-IDF tools or files. The only tool required is a GCC crosscompiler.
+A bare metal make-based SDK for the ESP32/ESP32C3 chips.  Written from scratch
+using datasheets ( [ESP32 C3
+TRM](https://www.espressif.com/sites/default/files/documentation/esp32-c3_technical_reference_manual_en.pdf),
+[ESP32
+TRM](https://www.espressif.com/sites/default/files/documentation/esp32_technical_reference_manual_en.pdf)).
+It is completely independent from the ESP-IDF and does not use any ESP-IDF
+tools or files. The only requirement is GCC crosscompiler.
 
 A screenshot below demonstrates a [examples/c3ws2812](examples/c3ws2812)
 RGB LED firmware flashed on a ESP32-C3-DevKitM-1 board. It takes < 2 seconds
@@ -16,7 +16,6 @@ for a full firmware rebuild and flash:
 
 # Environment setup
 
-Install a GCC RISCV compiler and export environment variables:
 - Using Docker on Linux or Mac. Slower builds, but works off-the-shelf:
   ```sh
   $ export MDK=/path/to/mdk                 # Points to MDK directory
@@ -30,7 +29,6 @@ Install a GCC RISCV compiler and export environment variables:
   $ export MDK=/path/to/mdk                 # Points to MDK directory
   $ export PATH=$PATH:$MDK/tools            # Add $MDK/tools to $PATH
   $ export TOOLCHAIN=riscv64-unknown-elf    # $TOOLCHAIN-gcc must run GCC
-  $ export ARCH=ESP32C3                     # Choices: ESP32C3, ESP32
   $ export PORT=/dev/cu.usb*                # Serial port for flashing
   ```
 - Native Linux: install GCC, e.g. from https://github.com/espressif/crosstool-NG, then
@@ -38,7 +36,6 @@ Install a GCC RISCV compiler and export environment variables:
   $ export MDK=/path/to/mdk                 # Points to MDK directory
   $ export PATH=$PATH:$MDK/tools            # Add $MDK/tools to $PATH
   $ export TOOLCHAIN=riscv32-esp-elf        # $TOOLCHAIN-gcc must run GCC
-  $ export ARCH=ESP32C3                     # Choices: ESP32C3, ESP32
   $ export PORT=/dev/ttyUSB0                # Serial port for flashing
   ```
 
@@ -64,34 +61,23 @@ include $(MDK)/make/build.mk
 
 # Environment reference
 
-Environment / Makefile variables:
-
-| Name | Description |
-| ---- | ----------- |
-| ARCH | Architecture. Possible values: ESP32C3, ESP32. Default: ESP32C3 |
-| TOOLCHAIN | GCC binary prefix. Default: riscv64-unknown-elf |
-| PORT | Serial port. Default: /dev/ttyUSB0 |
-| FPARAMS | Flash parameters, see below. Default: 0x21f |
-| EXTRA\_CFLAGS | Extra compiler flags. Default: empty |
-| EXTRA\_LINKFLAGS | Extra linker flags. Default: empty |
-
-Makefile targets:
-
-| Name | Description | 
-| ---- | ----------- |
-| clean | Clean up build artifacts |
-| build | Build firmware in a project's `build/` directory |
-| flash | Flash firmware. Needs PORT variable set |
-| monitor | Run serial monitor. Needs PORT variable set |
-| unix | Build Mac/Linux executable firmware, see "UNIX mode" section below |
-
-
-Preprocessor definitions
-
-| Name | Description | 
-| ---- | ----------- |
-| LED1 | User LED pin. Default: 2 |
-| BTN1 | User button pin. Default: 9 |
+- **Environment / Makefile variables:**
+  - `ARCH` - Architecture. Possible values: ESP32C3, ESP32. Default: ESP32C3
+  - `TOOLCHAIN` - GCC binary prefix. Default: riscv64-unknown-elf
+  - `PORT` - Serial port for flashing. Default: /dev/ttyUSB0
+  - `FLASH_PARAMS` - Flash parameters, see below. Default: empty
+  - `FLASH_SPI` - Flash SPI settings, see below. Default: empty
+  - `EXTRA_CFLAGS` - Extra compiler flags. Default: empty
+  - `EXTRA_LINKFLAGS` - Extra linker flags. Default: empty
+- **Makefile targets:**
+  - `make clean` - Clean up build artifacts
+  - `make build` - Build firmware in a project's `build/` directory
+  - `make flash` - Flash firmware. Needs PORT variable set
+  - `make monitor` - Run serial monitor. Needs PORT variable set
+  - `make unix` - Build Mac/Linux executable firmware, see "UNIX mode" section below
+- **SDK Preprocessor definitions:**
+  - `LED1` - User LED pin. Default: 2
+  - `BTN1` - User button pin. Default: 9
 
 
 # API reference
@@ -187,12 +173,72 @@ implementation looks like:
 #endif
 ```
 
+# esputil
+
+`esputil` is a command line tool for managing Espressif devices. It is a
+replacement of `esptool.py`. `esputil` is written in C, its source code
+is in [tools/esputil.c](tools/esputil.c). Below is a quick reference:
+
+```sh
+$ esputil -h
+Defaults: BAUD=115200, PORT=/dev/ttyUSB0
+Usage:
+  esputil [-v] [-b BAUD] [-p PORT] monitor
+  esputil [-v] [-b BAUD] [-p PORT] info
+  esputil [-v] [-b BAUD] [-p PORT] [-fp FLASH_PARAMS] [-fspi FLASH_SPI] flash OFFSET BINFILE ...
+  esputil mkbin OUTPUT.BIN ENTRYADDR SECTION_ADDR SECTION.BIN ...
+  esputil mkhex ADDRESS1 BINFILE1 ADDRESS2 BINFILE2 ...
+  esputil [-tmp TMP_DIR] unhex HEXFILE
+```
+
+Example: flash MDK-built ESP32C3 firmware:
+
+```sh
+$ esputil flash 0 ./build/firmware.bin
+```
+
+Example: flash ESP-IDF built firmware on ESP32-PICO-Kit board:
+
+```sh
+$ esputil -fspi 6,17,8,11,16 flash 
+  0x1000 build/bootloader/bootloader.bin \
+  0x8000 build/partitions.bin \
+  0xe000 build/ota_data_initial.bin \
+  0x10000 build/firmware.bin
+```
+
+## Build esputil
+
+**Linux, macOS:**
+
+```sh
+$ make -C tools esputil
+```
+
+**Windows:**  
+Choose one of the below compilers, and use the provided command from the mdk root folder. Check to make sure the path points to where you installed the compiler.
+
+[Clang](https://releases.llvm.org/download.html): (From PowerShell)
+```powershell
+& 'C:\Program Files\LLVM\bin\clang.exe' -v -o esputil.exe tools\esputil.c
+```
+
+[TCC](http://download.savannah.gnu.org/releases/tinycc/): (From PowerShell)
+```powershell
+& 'C:\Program Files\tcc\tcc.exe' -v -o esputil.exe tools\esputil.c
+```
+
+MSVC: (From Developer Command Prompt)
+```sh
+cl tools\esputil.c
+```
+
 # ESP32 flashing
 
 Flashing ESP32 chips is done via UART. In order to do so, ESP32 should be
 rebooted in the flashing mode, by pulling IO0 low during boot. Then, a ROM
 bootloader uses SLIP framing for a simple serial protocol, which is
-described at https://github.com/espressif/esptool/wiki/Serial-Protocol.
+described at https://docs.espressif.com/projects/esptool/en/latest/advanced-topics/serial-protocol.html.
 
 Using that SLIP protocol, it is possible to write images to flash at
 any offset. That is what [tools/esputil.c](tools/esputil.c) implements.
