@@ -35,7 +35,7 @@ endif
 DEFS      ?=
 INCLUDES  ?= -I. -I$(MDK)/src -I$(TCC_INCLUDE) -D$(ARCH)
 WARNFLAGS ?= -W -Wall -Wextra -Wundef -Wshadow -Wdouble-promotion -fno-common -Wconversion
-OPTFLAGS  ?= -Os -g3 -ffunction-sections -fdata-sections
+OPTFLAGS  ?= -Os -g -ffunction-sections -fdata-sections
 CFLAGS    ?= $(WARNFLAGS) $(OPTFLAGS) $(MCUFLAGS) $(INCLUDES) $(DEFS) $(EXTRA_CFLAGS)
 #CFLAGS    ?= $(INCLUDES) $(DEFS) $(EXTRA_CFLAGS)
 LINKFLAGS ?= $(MCUFLAGS) -T$(MDK)/make/$(ARCH).ld -nostdlib -nostartfiles -Wl,--gc-sections $(EXTRA_LINKFLAGS)

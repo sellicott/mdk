@@ -60,7 +60,7 @@ static void clock_init(void) {
 
 // Initialise memory and other low level stuff, and call main()
 void start(void) {
-#if defined(__unix) || defined(__unix__) || defined(__APPLE__)
+#if (defined(__unix) || defined(__unix__) || defined(__APPLE__)) && !defined(__TINYC__)
   char _sbss, _ebss, _end, _eram;
 #else
   extern char _sbss, _ebss, _end, _eram;
